@@ -13,7 +13,18 @@ from helper_code import *
 import numpy as np, os, sys
 import mne
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+#from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+#from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+
+#from sklearn.pipeline import make_pipeline
+#from sklearn.svm import SVC, SVR
+
+from sklearn.neural_network import MLPClassifier
+from sklearn.neural_network import MLPRegressor
+
+from sklearn.preprocessing import StandardScaler
+from mlp import MLP
+
 import joblib
 
 ################################################################################
@@ -21,6 +32,14 @@ import joblib
 # Required functions. Edit these functions to add your code, but do not change the arguments of the functions.
 #
 ################################################################################
+
+FEATURES_FILE = "np_files/features.dat"
+OUTCOMES_FILE = "np_files/outcomes.dat"
+CPCS_FILE = "np_files/cpcs.dat"
+
+def print_one(*args):
+    sys.stdout.write(*args)
+    sys.stdout.flush()
 
 # Train your model.
 def train_challenge_model(data_folder, model_folder, verbose):
@@ -41,31 +60,81 @@ def train_challenge_model(data_folder, model_folder, verbose):
     if verbose >= 1:
         print('Extracting features and labels from the Challenge data...')
 
-    features = list()
-    outcomes = list()
-    cpcs = list()
 
-    for i in range(num_patients):
-        if verbose >= 2:
-            print('    {}/{}...'.format(i+1, num_patients))
+    features = None
+    outcomes = None
+    cpcs = None
+    try:
+        ff = open(FEATURES_FILE, "rb")
+        features = np.load(ff)
+        print("Loaded features from file")
 
-        # Load data.
-        patient_id = patient_ids[i]
-        patient_metadata, recording_metadata, recording_data = load_challenge_data(data_folder, patient_id)
+        of = open(OUTCOMES_FILE, "rb")
+        outcomes = np.load(of)
+        print("Loaded outcomes from file")
 
-        # Extract features.
-        current_features = get_features(patient_metadata, recording_metadata, recording_data)
-        features.append(current_features)
+        cf = open(CPCS_FILE, "rb")
+        cpcs = np.load(cf)
+        print("Loaded cpcs from file")
 
-        # Extract labels.
-        current_outcome = get_outcome(patient_metadata)
-        outcomes.append(current_outcome)
-        current_cpc = get_cpc(patient_metadata)
-        cpcs.append(current_cpc)
+    except IOError:
+        features = None
+        outcomes = None
+        cpcs = None
 
-    features = np.vstack(features)
-    outcomes = np.vstack(outcomes)
-    cpcs = np.vstack(cpcs)
+    if features is None or outcomes is None or cpcs is None:
+        features = list()
+        outcomes = list()
+        cpcs = list()
+
+        print("Loading training data")
+        for i in range(num_patients):
+            if verbose >= 2:
+                print('    {}/{}...'.format(i+1, num_patients))
+
+            print_one("+")
+            # Load data.
+            patient_id = patient_ids[i]
+            patient_metadata, recording_metadata, recording_data = load_challenge_data(data_folder, patient_id)
+
+            # Extract features.
+            current_features = get_features(patient_metadata, recording_metadata, recording_data)
+            features.append(current_features)
+
+            # Extract labels.
+            current_outcome = get_outcome(patient_metadata)
+            outcomes.append(current_outcome)
+            current_cpc = get_cpc(patient_metadata)
+            cpcs.append(current_cpc)
+            print_one("-")
+        print("\n")
+
+        features = np.vstack(features)
+        outcomes = np.vstack(outcomes)
+        cpcs = np.vstack(cpcs)
+
+        # Impute any missing features; use the mean value by default.
+        imputer = SimpleImputer().fit(features)
+
+        # Train the models.
+        features = imputer.transform(features)
+
+        with open(FEATURES_FILE, "wb") as ff:
+            np.save(ff, features)
+
+        with open(OUTCOMES_FILE, "wb") as of:
+            np.save(of, outcomes)
+
+        with open(CPCS_FILE, "wb") as cf:
+            np.save(cf, cpcs)
+
+        print("Saved features, outcomes and cpcs to file")
+    else:
+        # Impute any missing features; use the mean value by default.
+        imputer = SimpleImputer().fit(features)
+
+        # Train the models.
+        features = imputer.transform(features)
 
     # Train the models.
     if verbose >= 1:
@@ -76,15 +145,26 @@ def train_challenge_model(data_folder, model_folder, verbose):
     max_leaf_nodes = 456  # Maximum number of leaf nodes in each tree.
     random_state   = 789  # Random state; set for reproducibility.
 
-    # Impute any missing features; use the mean value by default.
-    imputer = SimpleImputer().fit(features)
-
-    # Train the models.
-    features = imputer.transform(features)
+    """
     outcome_model = RandomForestClassifier(
         n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, outcomes.ravel())
+    outcome_model = KNeighborsClassifier(n_neighbors=5).fit(features, outcomes.ravel())
+    outcome_model = make_pipeline(StandardScaler(), SVC(gamma='auto', probability=True)).fit(features, outcomes.ravel())
+    """
+    num_samples = features.shape[0]
+    num_features = features.shape[1]
+    num_output = outcomes.shape[1] + 1
+
+    #outcome_model = MLPClassifier(random_state=random_state, hidden_layer_sizes=(500,), max_iter=1000).fit(features, outcomes.ravel())
+    outcome_model = MLP(num_features, num_output, hidden_layer_sizes=(100, 16), max_iter=1000).fit(features, outcomes)
+
+    """
     cpc_model = RandomForestRegressor(
         n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, cpcs.ravel())
+    cpc_model = KNeighborsRegressor(n_neighbors=5).fit(features, cpcs.ravel())
+    cpc_model = make_pipeline(StandardScaler(), SVR(C=1.0, epsilon=0.2)).fit(features, cpcs.ravel())
+    """
+    cpc_model = MLPRegressor(random_state=random_state, max_iter=500).fit(features, cpcs.ravel())
 
     # Save the models.
     save_challenge_model(model_folder, imputer, outcome_model, cpc_model)
@@ -116,17 +196,18 @@ def run_challenge_models(models, data_folder, patient_id, verbose):
     features = imputer.transform(features)
 
     # Apply models to features.
+    print("Features dimension: ", features.shape)
     outcome = outcome_model.predict(features)[0]
-    outcome_probability = outcome_model.predict_proba(features)[0, 1]
+    outcome_probability = outcome_model.predict_proba(features).ravel()[outcome]
     cpc = cpc_model.predict(features)[0]
 
     # Ensure that the CPC score is between (or equal to) 1 and 5.
     cpc = np.clip(cpc, 1, 5)
 
+    print("outcome, outcome_probability: ", outcome, outcome_probability)
     return outcome, outcome_probability, cpc
 
-################################################################################
-#
+################################################################################ #
 # Optional functions. You can change or remove these functions and/or add new functions.
 #
 ################################################################################
