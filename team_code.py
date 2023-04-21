@@ -33,10 +33,6 @@ import joblib
 #
 ################################################################################
 
-FEATURES_FILE = "np_files/features.dat"
-OUTCOMES_FILE = "np_files/outcomes.dat"
-CPCS_FILE = "np_files/cpcs.dat"
-
 def print_one(*args):
     sys.stdout.write(*args)
     sys.stdout.flush()
@@ -60,81 +56,41 @@ def train_challenge_model(data_folder, model_folder, verbose):
     if verbose >= 1:
         print('Extracting features and labels from the Challenge data...')
 
+    features = list()
+    outcomes = list()
+    cpcs = list()
 
-    features = None
-    outcomes = None
-    cpcs = None
-    try:
-        ff = open(FEATURES_FILE, "rb")
-        features = np.load(ff)
-        print("Loaded features from file")
+    print("Loading training data")
+    for i in range(num_patients):
+        if verbose >= 2:
+            print('    {}/{}...'.format(i+1, num_patients))
 
-        of = open(OUTCOMES_FILE, "rb")
-        outcomes = np.load(of)
-        print("Loaded outcomes from file")
+        print_one("+")
+        # Load data.
+        patient_id = patient_ids[i]
+        patient_metadata, recording_metadata, recording_data = load_challenge_data(data_folder, patient_id)
 
-        cf = open(CPCS_FILE, "rb")
-        cpcs = np.load(cf)
-        print("Loaded cpcs from file")
+        # Extract features.
+        current_features = get_features(patient_metadata, recording_metadata, recording_data)
+        features.append(current_features)
 
-    except IOError:
-        features = None
-        outcomes = None
-        cpcs = None
+        # Extract labels.
+        current_outcome = get_outcome(patient_metadata)
+        outcomes.append(current_outcome)
+        current_cpc = get_cpc(patient_metadata)
+        cpcs.append(current_cpc)
+        print_one("-")
+    print("\n")
 
-    if features is None or outcomes is None or cpcs is None:
-        features = list()
-        outcomes = list()
-        cpcs = list()
+    features = np.vstack(features)
+    outcomes = np.vstack(outcomes)
+    cpcs = np.vstack(cpcs)
 
-        print("Loading training data")
-        for i in range(num_patients):
-            if verbose >= 2:
-                print('    {}/{}...'.format(i+1, num_patients))
+    # Impute any missing features; use the mean value by default.
+    imputer = SimpleImputer().fit(features)
 
-            print_one("+")
-            # Load data.
-            patient_id = patient_ids[i]
-            patient_metadata, recording_metadata, recording_data = load_challenge_data(data_folder, patient_id)
-
-            # Extract features.
-            current_features = get_features(patient_metadata, recording_metadata, recording_data)
-            features.append(current_features)
-
-            # Extract labels.
-            current_outcome = get_outcome(patient_metadata)
-            outcomes.append(current_outcome)
-            current_cpc = get_cpc(patient_metadata)
-            cpcs.append(current_cpc)
-            print_one("-")
-        print("\n")
-
-        features = np.vstack(features)
-        outcomes = np.vstack(outcomes)
-        cpcs = np.vstack(cpcs)
-
-        # Impute any missing features; use the mean value by default.
-        imputer = SimpleImputer().fit(features)
-
-        # Train the models.
-        features = imputer.transform(features)
-
-        with open(FEATURES_FILE, "wb") as ff:
-            np.save(ff, features)
-
-        with open(OUTCOMES_FILE, "wb") as of:
-            np.save(of, outcomes)
-
-        with open(CPCS_FILE, "wb") as cf:
-            np.save(cf, cpcs)
-
-        print("Saved features, outcomes and cpcs to file")
-    else:
-        # Impute any missing features; use the mean value by default.
-        imputer = SimpleImputer().fit(features)
-
-        # Train the models.
-        features = imputer.transform(features)
+    # Train the models.
+    features = imputer.transform(features)
 
     # Train the models.
     if verbose >= 1:
