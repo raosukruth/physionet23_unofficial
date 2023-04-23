@@ -13,11 +13,11 @@ from helper_code import *
 import numpy as np, os, sys
 import mne
 from sklearn.impute import SimpleImputer
-#from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-#from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 
-#from sklearn.pipeline import make_pipeline
-#from sklearn.svm import SVC, SVR
+from sklearn.pipeline import make_pipeline
+from sklearn.svm import SVC, SVR
 
 from sklearn.neural_network import MLPClassifier
 from sklearn.neural_network import MLPRegressor
