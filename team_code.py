@@ -98,24 +98,24 @@ def train_challenge_model(data_folder, model_folder, verbose):
     """
     outcome_model = RandomForestClassifier(
         n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, outcomes.ravel())
-    outcome_model = make_pipeline(StandardScaler(), SVC(gamma='auto', probability=True)).fit(features, outcomes.ravel())
     outcome_model = MLPClassifier(random_state=random_state, hidden_layer_sizes=(500,), max_iter=1000).fit(features, outcomes.ravel())
+    outcome_model = KNeighborsClassifier(n_neighbors=5).fit(features, outcomes.ravel())
 
     num_features = features.shape[1]
     num_output = outcomes.shape[1] + 1
     outcome_model = MLP(num_features, num_output, hidden_layer_sizes=(100, 16), max_iter=1000).fit(features, outcomes)
     """
+    outcome_model = make_pipeline(StandardScaler(), SVC(gamma='auto', probability=True)).fit(features, outcomes.ravel())
 
-    outcome_model = KNeighborsClassifier(n_neighbors=5).fit(features, outcomes.ravel())
 
     """
     cpc_model = RandomForestRegressor(
         n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, cpcs.ravel())
-    cpc_model = make_pipeline(StandardScaler(), SVR(C=1.0, epsilon=0.2)).fit(features, cpcs.ravel())
+    cpc_model = KNeighborsRegressor(n_neighbors=5).fit(features, cpcs.ravel())
     cpc_model = MLPRegressor(random_state=random_state, max_iter=500).fit(features, cpcs.ravel())
     """
 
-    cpc_model = KNeighborsRegressor(n_neighbors=5).fit(features, cpcs.ravel())
+    cpc_model = make_pipeline(StandardScaler(), SVR(C=1.0, epsilon=0.2)).fit(features, cpcs.ravel())
 
     # Save the models.
     save_challenge_model(model_folder, imputer, outcome_model, cpc_model)
